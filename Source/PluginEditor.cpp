@@ -442,7 +442,7 @@ void SpatialMixProEditor::drawFrontView(Graphics& g)
 
     // Listener
     {
-        auto pt = frontPt(0.0f, 0.0f);
+        auto pt = frontPt(1.2f, 0.0f);
         g.setColour(Colour(C_BLUE).withAlpha(0.25f));
         g.fillEllipse(pt.x - dotR * 2, pt.y - dotR * 2, dotR * 4, dotR * 4);
         g.setColour(Colour(C_BLUE));
