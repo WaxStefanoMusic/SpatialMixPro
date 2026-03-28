@@ -44,6 +44,9 @@ private:
     } laf;
 
     juce::Label      nameLabel;
+    juce::Label      nameLabel2;
+    juce::Label      nameLabel2;
+    juce::Label      nameLabel2;
     juce::Slider     sliderX, sliderZ, sliderGain;
     juce::Slider     sliderX2, sliderY2, sliderZ2, sliderGain2;
     juce::Slider     sliderY;

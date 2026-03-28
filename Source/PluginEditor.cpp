@@ -19,6 +19,14 @@ SpatialMixProEditor::SpatialMixProEditor(SpatialMixProProcessor& p)
     nameLabel.onTextChange = [this] { proc.sourceName = nameLabel.getText(); };
     addAndMakeVisible(nameLabel);
 
+    nameLabel2.setText(proc.sourceName2, dontSendNotification);
+    nameLabel2.setFont(Font("Courier New", 15.0f, Font::bold));
+    nameLabel2.setColour(Label::textColourId, Colour(0xFF3399FF));
+    nameLabel2.setJustificationType(Justification::centredLeft);
+    nameLabel2.setEditable(false, true);
+    nameLabel2.onTextChange = [this] { proc.sourceName2 = nameLabel2.getText(); };
+    addAndMakeVisible(nameLabel2);
+
     // All sliders are horizontal
     auto mkH = [&](Slider& s, const String& suffix) {
         s.setSliderStyle(Slider::LinearHorizontal);
@@ -82,7 +90,11 @@ void SpatialMixProEditor::timerCallback()
     repaint(rTop); repaint(rFront); repaint(rBottom);
     if (nameLabel.getText() != proc.sourceName)
         nameLabel.setText(proc.sourceName, dontSendNotification);
+    if (nameLabel2.getText() != proc.sourceName2)
+        nameLabel2.setText(proc.sourceName2, dontSendNotification);
+    nameLabel2.setVisible(proc.paramDual->get());
     bool dual = proc.paramDual->get();
+    nameLabel2.setVisible(dual);
     sliderX2.setVisible(dual);
     sliderY2.setVisible(dual);
     sliderZ2.setVisible(dual);
@@ -163,11 +175,11 @@ void SpatialMixProEditor::resized()
     auto lp = rLeft.reduced(8, 8);
     const int rowH = jmax(22, lp.getHeight() / 16);
 
-    // Name label
+    // Spk1 name label ABOVE buttons
     nameLabel.setBounds(lp.removeFromTop(jmax(22, hH - 14)));
-    lp.removeFromTop(6);
+    lp.removeFromTop(3);
 
-    // MONO / PHASE / DUAL
+    // MONO / PHASE / DUAL below name
     {
         auto row = lp.removeFromTop(rowH);
         int bw = row.getWidth() / 3;
@@ -194,6 +206,10 @@ void SpatialMixProEditor::resized()
     bool dual = proc.paramDual->get();
     if (dual)
     {
+        // Spk2 name label ABOVE its buttons
+        nameLabel2.setBounds(lp.removeFromTop(jmax(20, hH - 16)));
+        lp.removeFromTop(3);
+
         // MONO2 / PHASE2
         auto row2 = lp.removeFromTop(rowH);
         int bw2 = row2.getWidth() / 2;
@@ -218,6 +234,7 @@ void SpatialMixProEditor::resized()
         btn21    .setBounds(row.reduced(2, 0));
     }
 
+    nameLabel2.setVisible(dual);
     sliderX2.setVisible(dual);
     sliderY2.setVisible(dual);
     sliderZ2.setVisible(dual);
@@ -316,15 +333,16 @@ void SpatialMixProEditor::drawLeftPanel(Graphics& g)
 
     if (proc.paramDual->get())
     {
-        yy += 8 + rowH + 6; // skip MONO2/PHASE2 row + gap
-        g.setColour(Colour(C_BLUE).withAlpha(0.55f));
-        g.setFont(Font("Courier New", fs * 0.8f, Font::plain));
+        // Skip: gap8 + nameLabel2 row(+3) + MONO2 row(+6)
+        yy += 8 + jmax(20, rowH - 2) + 3 + rowH + 6;
+        g.setFont(Font("Courier New", fs, Font::bold));
+        g.setColour(Colour(C_AMBER));
         g.drawText("X2", lp.getX(), yy, 18, rowH, Justification::centredLeft, false); yy += rowH + 3;
-        g.setColour(Colour(C_GREEN).withAlpha(0.55f));
+        g.setColour(Colour(C_GREEN));
         g.drawText("Y2", lp.getX(), yy, 18, rowH, Justification::centredLeft, false); yy += rowH + 3;
-        g.setColour(Colour(C_BLUE).withAlpha(0.55f));
+        g.setColour(Colour(C_AMBER));
         g.drawText("Z2", lp.getX(), yy, 18, rowH, Justification::centredLeft, false); yy += rowH + 3;
-        g.setColour(Colour(C_GREEN).withAlpha(0.55f));
+        g.setColour(Colour(C_BLUE));
         g.drawText("V2", lp.getX(), yy, 18, rowH, Justification::centredLeft, false);
     }
 
@@ -433,7 +451,7 @@ void SpatialMixProEditor::drawTopView(Graphics& g)
         g.fillEllipse(pt.x - r2 * 0.38f, pt.y - r2 * 0.38f, r2 * 0.76f, r2 * 0.76f);
         g.setColour(Colour(0xFF3399FF));
         g.setFont(Font("Courier New", fs, Font::bold));
-        g.drawText(proc.sourceName + " [2]", (int)(pt.x - 65), (int)(pt.y - r2 * 2.5f - fs - 2), 130, (int)(fs + 2), Justification::centred, false);
+        g.drawText(proc.sourceName2, (int)(pt.x - 65), (int)(pt.y - r2 * 2.5f - fs - 2), 130, (int)(fs + 2), Justification::centred, false);
     }
 }
 
@@ -482,7 +500,7 @@ void SpatialMixProEditor::drawFrontView(Graphics& g)
 
     g.setColour(Colour(0xFF2A2A2A)); g.drawRect(rv, 1.5f);
 
-    float fs      = jmax(9.0f,  (float)rFront.getHeight() / 22.0f);
+    float fs      = jmax(9.0f,  (float)rTop.getHeight() / 50.0f);  // same scale as VISTA TOP
     float dotBase = jmax(7.0f,  (float)rFront.getWidth()  / 55.0f);
 
     // SX / DX labels

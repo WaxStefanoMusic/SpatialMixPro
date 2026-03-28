@@ -239,7 +239,8 @@ AudioProcessorEditor* SpatialMixProProcessor::createEditor()
 void SpatialMixProProcessor::getStateInformation(MemoryBlock& destData)
 {
     ValueTree st("SMP2");
-    st.setProperty("name",  sourceName,            nullptr);
+    st.setProperty("name",  sourceName,             nullptr);
+    st.setProperty("name2", sourceName2,            nullptr);
     st.setProperty("x",     paramX->get(),          nullptr);
     st.setProperty("y",     paramY->get(),           nullptr);
     st.setProperty("z",     paramZ->get(),           nullptr);
@@ -262,7 +263,8 @@ void SpatialMixProProcessor::setStateInformation(const void* data, int sz)
 {
     auto st = ValueTree::readFromData(data, (size_t)sz);
     if (!st.isValid()) return;
-    sourceName = st.getProperty("name", "Object 1").toString();
+    sourceName  = st.getProperty("name",  "Object 1").toString();
+    sourceName2 = st.getProperty("name2", "Object 2").toString();
     *paramX     = (float)st.getProperty("x",    0.0f);
     *paramY     = (float)st.getProperty("y",    1.5f);
     *paramZ     = (float)st.getProperty("z",   -3.0f);

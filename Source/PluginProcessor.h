@@ -40,7 +40,8 @@ public:
     juce::AudioParameterBool*   paramMono2;
     juce::AudioParameterBool*   paramPhase2;
 
-    juce::String sourceName { "Object 1" };
+    juce::String sourceName  { "Object 1" };
+    juce::String sourceName2 { "Object 2" };
 
 private:
     double currentSampleRate = 44100.0;
