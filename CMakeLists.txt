@@ -42,6 +42,8 @@ target_compile_definitions(SpatialMixPro
         JUCE_DISPLAY_SPLASH_SCREEN=0
 )
 
+juce_generate_juce_header(SpatialMixPro)
+
 target_link_libraries(SpatialMixPro
     PRIVATE
         juce::juce_audio_utils
