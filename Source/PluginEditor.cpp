@@ -1,7 +1,7 @@
 #include "PluginEditor.h"
 using namespace juce;
 
-const SpatialMixProEditor::HallSection SpatialMixProEditor::kSections[] = {};
+const SpatialMixProEditor::HallSection SpatialMixProEditor::kSections[] = {{ "", 0,0,0,0,0 }};
 const int SpatialMixProEditor::kNumSections = 0;
 
 SpatialMixProEditor::SpatialMixProEditor(SpatialMixProProcessor& p)
