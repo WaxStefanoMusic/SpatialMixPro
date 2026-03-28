@@ -1,0 +1,35 @@
+name: Build SpatialMix Pro VST3
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Windows 64-bit VST3
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache JUCE
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-7.0.9-win-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configure CMake
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release -A x64
+        shell: cmd
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+        shell: cmd
+
+      - name: Upload VST3
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpatialMixPro-Win64-VST3
+          path: build/SpatialMixPro_artefacts/Release/VST3/
+          retention-days: 90
