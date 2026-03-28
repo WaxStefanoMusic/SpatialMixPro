@@ -11,13 +11,12 @@ const SpatialMixProEditor::HallSection SpatialMixProEditor::kSections[] = {
     { "OBOI",         -1.8f, -1.5f, 2.0f, 2.0f, 0xFF39FF14 },
     { "CLARINETTI",    0.2f, -1.5f, 2.0f, 2.0f, 0xFF5AFF3A },
     { "FAGOTTI",       2.4f, -1.5f, 2.0f, 2.0f, 0xFF5AFF3A },
-    { "CORNI",        -5.5f,  1.5f, 2.5f, 2.5f, 0xFFFF9500 },
-    { "TROMBE",       -2.5f,  1.5f, 2.5f, 2.5f, 0xFFFFB030 },
-    { "TROMBONI",      0.5f,  1.5f, 2.5f, 2.5f, 0xFFFFB030 },
-    { "TUBA",          3.2f,  1.5f, 1.8f, 2.5f, 0xFFFF6010 },
-    { "ARPA",         -7.5f, -3.0f, 1.5f, 2.5f, 0xFFC77DFF },
-    { "TIMPANI",       4.5f,  1.5f, 2.5f, 2.5f, 0xFFFF3C3C },
-    { "PERCUSSIONI",   6.5f,  1.0f, 1.8f, 3.0f, 0xFFFF3C3C },
+    { "CORNI",        -5.5f, -0.5f, 2.5f, 2.5f, 0xFFFF9500 },
+    { "TROMBE",       -2.5f, -0.5f, 2.5f, 2.5f, 0xFFFFB030 },
+    { "TROMBONI",      0.5f, -0.5f, 2.5f, 2.5f, 0xFFFFB030 },
+    { "TUBA",          3.2f, -0.5f, 1.8f, 2.5f, 0xFFFF6010 },
+    { "TIMPANI",       4.5f, -0.5f, 2.5f, 2.5f, 0xFFFF3C3C },
+    { "PERCUSSIONI",   6.5f, -0.5f, 1.8f, 3.0f, 0xFFFF3C3C },
 };
 const int SpatialMixProEditor::kNumSections = 16;
 
