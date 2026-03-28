@@ -53,6 +53,5 @@ private:
     void updateElevFilter(float elevDeg,
                           juce::dsp::IIR::Filter<float>& fl,
                           juce::dsp::IIR::Filter<float>& fr);
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SpatialMixProProcessor)
 };
