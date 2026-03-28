@@ -49,6 +49,7 @@ private:
     juce::Slider     sliderY;
     juce::TextButton btnHRTF, btnStereo, btn21;
     juce::TextButton btnMono, btnPhase, btnDual, btnHelp;
+    juce::TextButton btnMono2, btnPhase2;
 
     std::unique_ptr<juce::SliderParameterAttachment> attX, attZ, attGain;
     std::unique_ptr<juce::SliderParameterAttachment> attX2, attZ2, attGain2, attY;

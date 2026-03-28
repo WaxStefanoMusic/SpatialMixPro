@@ -37,6 +37,8 @@ public:
     juce::AudioParameterFloat*  paramY2;
     juce::AudioParameterFloat*  paramZ2;
     juce::AudioParameterFloat*  paramGain2;
+    juce::AudioParameterBool*   paramMono2;
+    juce::AudioParameterBool*   paramPhase2;
 
     juce::String sourceName { "Object 1" };
 

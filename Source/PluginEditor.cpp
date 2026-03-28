@@ -1,29 +1,14 @@
 #include "PluginEditor.h"
 using namespace juce;
 
-const SpatialMixProEditor::HallSection SpatialMixProEditor::kSections[] = {
-    { "VIOLINI I",    -6.5f, -5.5f, 3.2f, 3.0f, 0xFF00D4FF },
-    { "VIOLINI II",   -3.0f, -5.5f, 2.8f, 3.0f, 0xFF00D4FF },
-    { "VIOLE",         0.3f, -5.5f, 2.5f, 3.0f, 0xFF39D4FF },
-    { "VIOLONCELLI",   3.0f, -5.5f, 2.8f, 3.0f, 0xFF39D4FF },
-    { "CONTRABBASSI",  6.0f, -5.0f, 2.0f, 3.5f, 0xFF1A8CFF },
-    { "FLAUTI",       -4.0f, -1.5f, 2.0f, 2.0f, 0xFF39FF14 },
-    { "OBOI",         -1.8f, -1.5f, 2.0f, 2.0f, 0xFF39FF14 },
-    { "CLARINETTI",    0.2f, -1.5f, 2.0f, 2.0f, 0xFF5AFF3A },
-    { "FAGOTTI",       2.4f, -1.5f, 2.0f, 2.0f, 0xFF5AFF3A },
-    { "CORNI",        -5.5f, -0.5f, 2.5f, 2.5f, 0xFFFF9500 },
-    { "TROMBE",       -2.5f, -0.5f, 2.5f, 2.5f, 0xFFFFB030 },
-    { "TROMBONI",      0.5f, -0.5f, 2.5f, 2.5f, 0xFFFFB030 },
-    { "TUBA",          3.2f, -0.5f, 1.8f, 2.5f, 0xFFFF6010 },
-    { "TIMPANI",       4.5f, -0.5f, 2.5f, 2.5f, 0xFFFF3C3C },
-    { "PERCUSSIONI",   6.5f, -0.5f, 1.8f, 3.0f, 0xFFFF3C3C },
-};
-const int SpatialMixProEditor::kNumSections = 16;
+const SpatialMixProEditor::HallSection SpatialMixProEditor::kSections[] = {};
+const int SpatialMixProEditor::kNumSections = 0;
 
 SpatialMixProEditor::SpatialMixProEditor(SpatialMixProProcessor& p)
     : AudioProcessorEditor(p), proc(p),
       btnHRTF("HRTF"), btnStereo("STEREO"), btn21("2.1"),
-      btnMono("MONO"), btnPhase("PHASE"), btnDual("DUAL"), btnHelp("?")
+      btnMono("MONO"), btnPhase("PHASE"), btnDual("DUAL"), btnHelp("?"),
+      btnMono2("MONO 2"), btnPhase2("FASE 2")
 {
     setLookAndFeel(&laf);
 
@@ -60,7 +45,7 @@ SpatialMixProEditor::SpatialMixProEditor(SpatialMixProProcessor& p)
     attGain2= std::make_unique<SliderParameterAttachment>(*proc.paramGain2, sliderGain2);
     attY    = std::make_unique<SliderParameterAttachment>(*proc.paramY,     sliderY);
 
-    for (auto* b : { &btnHRTF, &btnStereo, &btn21, &btnMono, &btnPhase, &btnDual, &btnHelp })
+    for (auto* b : { &btnHRTF, &btnStereo, &btn21, &btnMono, &btnPhase, &btnDual, &btnHelp, &btnMono2, &btnPhase2 })
         addAndMakeVisible(*b);
 
     btnHRTF  .onClick = [this] { proc.paramMode->setValueNotifyingHost(0.0f);  updateModeButtons(); };
@@ -69,6 +54,8 @@ SpatialMixProEditor::SpatialMixProEditor(SpatialMixProProcessor& p)
     btnMono  .onClick = [this] { proc.paramMono ->setValueNotifyingHost(proc.paramMono->get()  ? 0.0f : 1.0f); updateOptionButtons(); };
     btnPhase .onClick = [this] { proc.paramPhase->setValueNotifyingHost(proc.paramPhase->get() ? 0.0f : 1.0f); updateOptionButtons(); };
     btnDual  .onClick = [this] { proc.paramDual ->setValueNotifyingHost(proc.paramDual->get()  ? 0.0f : 1.0f); updateOptionButtons(); resized(); };
+    btnMono2 .onClick = [this] { proc.paramMono2 ->setValueNotifyingHost(proc.paramMono2->get()  ? 0.0f : 1.0f); updateOptionButtons(); };
+    btnPhase2.onClick = [this] { proc.paramPhase2->setValueNotifyingHost(proc.paramPhase2->get() ? 0.0f : 1.0f); updateOptionButtons(); };
     btnHelp  .onClick = [this] { showHelp(); };
 
     updateModeButtons();
@@ -108,9 +95,14 @@ void SpatialMixProEditor::updateModeButtons()
 
 void SpatialMixProEditor::updateOptionButtons()
 {
-    btnMono .setToggleState(proc.paramMono->get(),  dontSendNotification);
-    btnPhase.setToggleState(proc.paramPhase->get(), dontSendNotification);
-    btnDual .setToggleState(proc.paramDual->get(),  dontSendNotification);
+    btnMono .setToggleState(proc.paramMono->get(),   dontSendNotification);
+    btnPhase.setToggleState(proc.paramPhase->get(),  dontSendNotification);
+    btnDual .setToggleState(proc.paramDual->get(),   dontSendNotification);
+    btnMono2 .setToggleState(proc.paramMono2->get(), dontSendNotification);
+    btnPhase2.setToggleState(proc.paramPhase2->get(),dontSendNotification);
+    bool dual = proc.paramDual->get();
+    btnMono2 .setVisible(dual);
+    btnPhase2.setVisible(dual);
 }
 
 void SpatialMixProEditor::showHelp()
@@ -145,57 +137,79 @@ void SpatialMixProEditor::showHelp()
 void SpatialMixProEditor::resized()
 {
     auto b = getLocalBounds();
-    const int hH = jmax(46, b.getHeight() / 20);
+    const int hH  = jmax(46, b.getHeight() / 20);
     const int stH = jmax(34, b.getHeight() / 26);
-    const int lW  = jmax(210, b.getWidth() / 7);
-    const int fW  = jmax(260, b.getWidth() / 6);
+    const int lW  = jmax(220, b.getWidth() / 7);
+    const int yW  = 68;
 
     rHeader = b.removeFromTop(hH);
     rBottom = b.removeFromBottom(stH);
     rLeft   = b.removeFromLeft(lW);
-    rFront  = b.removeFromRight(fW);
-    rTop    = b;
 
-    // Help button in header
+    // Views stacked vertically, same width
+    rTop   = b.removeFromTop((int)(b.getHeight() * 0.62f));
+    rFront = b;
+
+    // Help button
     btnHelp.setBounds(rHeader.getRight() - 44, rHeader.getY() + 6, 34, hH - 12);
 
     // Left panel
     auto lp = rLeft.reduced(8, 8);
-    nameLabel.setBounds(lp.removeFromTop(jmax(22, hH - 14)));
-    lp.removeFromTop(6);
-    const int rowH = jmax(24, lp.getHeight() / 12);
+    const int rowH = jmax(22, lp.getHeight() / 14);
 
-    sliderX.setBounds(lp.removeFromTop(rowH));   lp.removeFromTop(3);
-    sliderZ.setBounds(lp.removeFromTop(rowH));   lp.removeFromTop(3);
-    sliderGain.setBounds(lp.removeFromTop(rowH)); lp.removeFromTop(8);
+    // 1. Name label
+    nameLabel.setBounds(lp.removeFromTop(jmax(22, hH - 14)));
+    lp.removeFromTop(4);
+
+    // 2. MONO / PHASE / DUAL buttons (spk1)
+    {
+        auto row = lp.removeFromTop(rowH);
+        int bw = row.getWidth() / 3;
+        btnMono .setBounds(row.removeFromLeft(bw).reduced(2, 0));
+        btnPhase.setBounds(row.removeFromLeft(bw).reduced(2, 0));
+        btnDual .setBounds(row.reduced(2, 0));
+    }
+    lp.removeFromTop(4);
+
+    // 3. Spk1 sliders X/Z/V
+    sliderX.setBounds(lp.removeFromTop(rowH));    lp.removeFromTop(2);
+    sliderZ.setBounds(lp.removeFromTop(rowH));    lp.removeFromTop(2);
+    sliderGain.setBounds(lp.removeFromTop(rowH)); lp.removeFromTop(6);
 
     bool dual = proc.paramDual->get();
     if (dual)
     {
-        sliderX2.setBounds(lp.removeFromTop(rowH));    lp.removeFromTop(3);
-        sliderZ2.setBounds(lp.removeFromTop(rowH));    lp.removeFromTop(3);
-        sliderGain2.setBounds(lp.removeFromTop(rowH)); lp.removeFromTop(8);
+        // 4. MONO2 / PHASE2 for spk2
+        auto row2 = lp.removeFromTop(rowH);
+        int bw2 = row2.getWidth() / 2;
+        btnMono2 .setBounds(row2.removeFromLeft(bw2).reduced(2, 0));
+        btnPhase2.setBounds(row2.reduced(2, 0));
+        lp.removeFromTop(4);
+
+        // 5. Spk2 sliders
+        sliderX2.setBounds(lp.removeFromTop(rowH));    lp.removeFromTop(2);
+        sliderZ2.setBounds(lp.removeFromTop(rowH));    lp.removeFromTop(2);
+        sliderGain2.setBounds(lp.removeFromTop(rowH)); lp.removeFromTop(6);
     }
 
+    // 6. Mode buttons HRTF/STEREO/2.1
     lp.removeFromTop(4);
-    auto row1 = lp.removeFromTop(rowH);
-    int bw1 = row1.getWidth() / 3;
-    btnHRTF  .setBounds(row1.removeFromLeft(bw1).reduced(2, 0));
-    btnStereo.setBounds(row1.removeFromLeft(bw1).reduced(2, 0));
-    btn21    .setBounds(row1.reduced(2, 0));
-    lp.removeFromTop(4);
-    auto row2 = lp.removeFromTop(rowH);
-    int bw2 = row2.getWidth() / 3;
-    btnMono .setBounds(row2.removeFromLeft(bw2).reduced(2, 0));
-    btnPhase.setBounds(row2.removeFromLeft(bw2).reduced(2, 0));
-    btnDual .setBounds(row2.reduced(2, 0));
+    {
+        auto row = lp.removeFromTop(rowH);
+        int bw = row.getWidth() / 3;
+        btnHRTF  .setBounds(row.removeFromLeft(bw).reduced(2, 0));
+        btnStereo.setBounds(row.removeFromLeft(bw).reduced(2, 0));
+        btn21    .setBounds(row.reduced(2, 0));
+    }
 
-    // Y slider in front panel
-    sliderY.setBounds(rFront.removeFromRight(52).reduced(4, 20));
+    // Y slider on right edge of front view
+    sliderY.setBounds(rFront.getRight() - yW, rFront.getY() + 10, yW - 4, rFront.getHeight() - 20);
 
     sliderX2.setVisible(dual);
     sliderZ2.setVisible(dual);
     sliderGain2.setVisible(dual);
+    btnMono2.setVisible(dual);
+    btnPhase2.setVisible(dual);
 }
 
 Point<float> SpatialMixProEditor::topPt(float x, float z) const
@@ -214,14 +228,14 @@ void SpatialMixProEditor::topToXZ(Point<float> pt, float& x, float& z) const
 }
 Point<float> SpatialMixProEditor::frontPt(float y, float z) const
 {
-    auto fr = rFront; fr.removeFromRight(52);
+    auto fr = rFront; fr.removeFromRight(68);
     auto r = fr.toFloat().reduced(18.0f);
     return { r.getX() + (z + 8.0f) / 16.0f * r.getWidth(),
              r.getBottom() - y / 6.0f * r.getHeight() };
 }
 void SpatialMixProEditor::frontToYZ(Point<float> pt, float& y, float& z) const
 {
-    auto fr = rFront; fr.removeFromRight(52);
+    auto fr = rFront; fr.removeFromRight(68);
     auto r = fr.toFloat().reduced(18.0f);
     z = ((pt.x - r.getX()) / r.getWidth())  * 16.0f - 8.0f;
     y = (r.getBottom() - pt.y) / r.getHeight() * 6.0f;
@@ -323,29 +337,20 @@ void SpatialMixProEditor::drawTopView(Graphics& g)
 
     float fs = jmax(9.0f, (float)rTop.getHeight() / 50.0f);
 
-    for (int i = 0; i < kNumSections; ++i)
-    {
-        const auto& s = kSections[i];
-        auto ptTL = topPt(s.x,       s.z);
-        auto ptBR = topPt(s.x + s.w, s.z + s.d);
-        Rectangle<float> sr(ptTL.x, ptTL.y, ptBR.x - ptTL.x, ptBR.y - ptTL.y);
-        g.setColour(Colour(s.col).withAlpha(0.08f)); g.fillRect(sr);
-        g.setColour(Colour(s.col).withAlpha(0.35f)); g.drawRect(sr, 1.0f);
-        g.setFont(Font("Courier New", jmax(7.0f, (float)rTop.getWidth() / 120.0f), Font::bold));
-        g.setColour(Colour(s.col).withAlpha(0.8f));
-        g.drawText(s.name, (int)sr.getX(), (int)sr.getY(), (int)sr.getWidth(), (int)sr.getHeight(),
-                   Justification::centred, true);
-    }
-
     g.setColour(Colour(0xFF222222)); g.drawRect(rv, 2.0f);
 
     float dotR = jmax(6.0f, (float)rTop.getWidth() / 70.0f);
 
-    // VISTA TOP label
-    g.setFont(Font("Courier New", fs * 1.5f, Font::bold));
-    g.setColour(Colour(C_AMBER));
-    g.drawText("VISTA TOP", rTop.getX(), rTop.getY() + 4, rTop.getWidth() - 4, (int)(fs * 2),
-               Justification::centredRight, false);
+    // VISTA TOP label — centered at top
+    {
+        int lblH = (int)(fs * 1.8f);
+        g.setColour(Colour(0xCC000000));
+        g.fillRect(rTop.getCentreX() - 80, rTop.getY() + 4, 160, lblH);
+        g.setFont(Font("Courier New", fs * 1.5f, Font::bold));
+        g.setColour(Colour(C_AMBER));
+        g.drawText("VISTA TOP", rTop.getX(), rTop.getY() + 4, rTop.getWidth(), lblH,
+                   Justification::centred, false);
+    }
 
     g.setFont(Font("Courier New", fs * 0.8f, Font::plain));
     g.setColour(Colour(C_DIM));
@@ -400,15 +405,16 @@ void SpatialMixProEditor::drawTopView(Graphics& g)
 
 void SpatialMixProEditor::drawFrontView(Graphics& g)
 {
-    auto fr = rFront; fr.removeFromRight(52);
+    auto fr = rFront; fr.removeFromRight(68);
     g.setColour(Colour(0xFF050505)); g.fillRect(rFront);
     g.setColour(Colour(C_BORDER));
-    g.drawVerticalLine(rFront.getX(), (float)rFront.getY(), (float)rFront.getBottom());
+    g.drawHorizontalLine(rFront.getY(), (float)rFront.getX(), (float)rFront.getRight());
 
     auto rv = fr.toFloat().reduced(18.0f);
-    g.setColour(Colour(0xFF080808)); g.fillRect(rv);
+    g.setColour(Colour(0xFF0D0D0D)); g.fillRect(rv);
 
-    g.setColour(Colour(0xFF0F0F0F));
+    // Grid lines
+    g.setColour(Colour(0xFF1A1A1A));
     for (int i = 0; i <= 16; ++i)
     {
         float xr = rv.getX() + i * rv.getWidth() / 16.0f;
@@ -418,27 +424,63 @@ void SpatialMixProEditor::drawFrontView(Graphics& g)
     {
         float yr = rv.getBottom() - i * rv.getHeight() / 6.0f;
         g.drawHorizontalLine((int)yr, rv.getX(), rv.getRight());
+        // Height labels on grid lines
+        if (i > 0) {
+            float fs2 = jmax(8.0f, (float)fr.getWidth() / 80.0f);
+            g.setFont(Font("Courier New", fs2, Font::plain));
+            g.setColour(Colour(0xFF555555));
+            g.drawText(String(i) + "m", (int)rv.getX() + 2, (int)yr - (int)fs2 - 1,
+                       30, (int)fs2 + 1, Justification::centredLeft, false);
+        }
     }
-    g.setColour(Colour(0xFF1E1E1E)); g.drawRect(rv, 1.5f);
+    g.setColour(Colour(0xFF303030)); g.drawRect(rv, 1.5f);
 
-    float fs   = jmax(8.0f, (float)fr.getWidth() / 28.0f);
-    float dotR = jmax(5.0f, (float)fr.getWidth() / 55.0f);
+    float fs   = jmax(10.0f, (float)fr.getHeight() / 18.0f);
+    float dotR = jmax(6.0f,  (float)fr.getWidth()  / 50.0f);
 
-    // VISTA FRONTALE label
-    g.setFont(Font("Courier New", fs * 1.3f, Font::bold));
-    g.setColour(Colour(C_AMBER));
-    g.drawText("VISTA FRONTALE", fr.getX() + 2, fr.getY() + 4, fr.getWidth() - 4, (int)(fs * 2),
-               Justification::centredLeft, false);
+    // VISTA FRONTALE label — large, with background for contrast
+    {
+        String lbl = "VISTA FRONTALE";
+        int lblW = fr.getWidth() - 80;
+        int lblH = (int)(fs * 1.8f);
+        int lblX = fr.getX() + 4;
+        int lblY = fr.getY() + 4;
+        g.setColour(Colour(0xCC000000));
+        g.fillRect(lblX - 2, lblY - 2, lblW + 4, lblH + 4);
+        g.setFont(Font("Courier New", fs * 1.5f, Font::bold));
+        g.setColour(Colour(C_AMBER));
+        g.drawText(lbl, lblX, lblY, lblW, lblH, Justification::centredLeft, false);
+    }
 
-    g.setFont(Font("Courier New", fs * 0.75f, Font::plain));
-    g.setColour(Colour(C_DIM));
-    g.drawText("PALCO", fr.getX(), fr.getY() + (int)(fs * 2), fr.getWidth() / 2, (int)fs + 2, Justification::centredLeft, false);
-    g.drawText("RETRO", fr.getX() + fr.getWidth() / 2, fr.getY() + (int)(fs * 2), fr.getWidth() / 2, (int)fs + 2, Justification::centredRight, false);
-    g.drawText("SUOLO", fr.getX(), fr.getBottom() - (int)fs - 2, fr.getWidth(), (int)fs + 2, Justification::centredLeft, false);
+    // Direction labels with dark background boxes for contrast
+    auto drawContrastLabel = [&](const String& txt, int x, int y, int w, int h, Colour col) {
+        g.setColour(Colour(0xBB000000));
+        g.fillRect(x, y, w, h);
+        g.setColour(col);
+        g.drawText(txt, x, y, w, h, Justification::centred, false);
+    };
 
+    int lblH2 = (int)(fs * 1.1f);
     g.setFont(Font("Courier New", fs, Font::bold));
-    g.setColour(Colour(C_GREEN));
-    g.drawText("Y", rFront.getRight() - 48, rFront.getCentreY() - 10, 16, 20, Justification::centred, false);
+    drawContrastLabel("PALCO",  (int)rv.getX(),                  (int)rv.getY() + 2,       80, lblH2, Colour(C_GREEN));
+    drawContrastLabel("RETRO",  (int)rv.getRight() - 80,         (int)rv.getY() + 2,       80, lblH2, Colour(C_GREEN));
+    drawContrastLabel("SUOLO",  (int)rv.getCentreX() - 40,       (int)rv.getBottom() - lblH2 - 2, 80, lblH2, Colour(0xFFAAAAAA));
+    drawContrastLabel("SOFFITTO",(int)rv.getCentreX() - 50,      (int)rv.getY() + 2,      100, lblH2, Colour(0xFFAAAAAA));
+
+    // Big Y label with background
+    {
+        int yLblSize = (int)(rFront.getHeight() * 0.18f);
+        int yLblX = rFront.getRight() - 66;
+        int yLblY = rFront.getCentreY() - yLblSize / 2;
+        g.setColour(Colour(0xCC000000));
+        g.fillRoundedRectangle((float)yLblX, (float)yLblY, 60.0f, (float)yLblSize, 4.0f);
+        g.setColour(Colour(C_GREEN));
+        g.setFont(Font("Courier New", (float)yLblSize * 0.75f, Font::bold));
+        g.drawText("Y", yLblX, yLblY, 60, yLblSize, Justification::centred, false);
+        g.setFont(Font("Courier New", (float)yLblSize * 0.25f, Font::plain));
+        g.setColour(Colour(0xFF888888));
+        g.drawText("ALTEZZA", yLblX, yLblY + (int)(yLblSize * 0.72f), 60, (int)(yLblSize * 0.28f), Justification::centred, false);
+    }
 
     // Listener
     {

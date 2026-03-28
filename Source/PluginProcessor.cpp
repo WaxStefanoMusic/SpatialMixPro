@@ -20,6 +20,8 @@ SpatialMixProProcessor::SpatialMixProProcessor()
     addParameter(paramY2    = new AudioParameterFloat ({"y2", 1}, "Pos Y2",  0.0f,  6.0f,  1.5f));
     addParameter(paramZ2    = new AudioParameterFloat ({"z2", 1}, "Pos Z2", -8.0f,  8.0f, -3.0f));
     addParameter(paramGain2 = new AudioParameterFloat ({"g2", 1}, "Volume2", 0.0f,  2.0f,  1.0f));
+    addParameter(paramMono2  = new AudioParameterBool  ({"mn2",1}, "Mono2",  false));
+    addParameter(paramPhase2 = new AudioParameterBool  ({"ph2",1}, "Phase2", false));
 }
 
 SpatialMixProProcessor::~SpatialMixProProcessor() {}
@@ -136,7 +138,9 @@ void SpatialMixProProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffer
         const float monoIn = (chL[i] + chR[i]) * 0.5f;
 
         const float dist1  = jmax(0.1f, std::sqrt(x * x + y * y + z * z));
-        const float dGain1 = 1.0f / dist1;
+        // Musical distance law: logarithmic rolloff, never below 25%
+        // ref=1m=100%, 4m=62%, 8m=47% — trombone in fondo si sente sempre
+        const float dGain1 = jmax(0.25f, 1.0f / (1.0f + 0.4f * (dist1 - 1.0f)));
         const float az1    = std::atan2(x, -z);
         const float sinAz1 = std::sin(az1);
         const float panL1  = std::sqrt(jmax(0.0f, 0.5f * (1.0f - sinAz1)));
@@ -166,6 +170,10 @@ void SpatialMixProProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffer
         }
         else { outL1 = sigL1; outR1 = sigR1; }
 
+        // Apply spk1 mono/phase
+        if (isMono)  { outL1 = outR1 = (outL1 + outR1) * 0.5f; }
+        if (isPhase) { outL1 = -outL1; outR1 = -outR1; }
+
         float outL = outL1;
         float outR = outR1;
 
@@ -177,7 +185,7 @@ void SpatialMixProProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffer
             const float g2    = smGain2.getNextValue();
             const float rear2 = smRear2.getNextValue();
             const float dist2  = jmax(0.1f, std::sqrt(x2 * x2 + y2 * y2 + z2 * z2));
-            const float dGain2 = 1.0f / dist2;
+            const float dGain2 = jmax(0.25f, 1.0f / (1.0f + 0.4f * (dist2 - 1.0f)));
             const float az2    = std::atan2(x2, -z2);
             const float sinAz2 = std::sin(az2);
             const float panL2  = std::sqrt(jmax(0.0f, 0.5f * (1.0f - sinAz2)));
@@ -204,12 +212,15 @@ void SpatialMixProProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffer
                 dWritePos2 = (dWritePos2 + 1) % dBufSize;
             }
             else { outL2 = sL2; outR2 = sR2; }
+            // Apply spk2 mono/phase independently
+            const bool isMono2  = paramMono2->get();
+            const bool isPhase2 = paramPhase2->get();
+            if (isMono2)  { outL2 = outR2 = (outL2 + outR2) * 0.5f; }
+            if (isPhase2) { outL2 = -outL2; outR2 = -outR2; }
+
             outL = (outL1 + outL2) * 0.5f;
             outR = (outR1 + outR2) * 0.5f;
         }
-
-        if (isMono)  { outL = outR = (outL + outR) * 0.5f; }
-        if (isPhase) { outL = -outL; outR = -outR; }
         if (mode == 2)
         {
             float sub = (subFilterL.processSample(outL) + subFilterR.processSample(outR)) * 0.3f;
@@ -241,6 +252,8 @@ void SpatialMixProProcessor::getStateInformation(MemoryBlock& destData)
     st.setProperty("y2",    paramY2->get(),           nullptr);
     st.setProperty("z2",    paramZ2->get(),           nullptr);
     st.setProperty("g2",    paramGain2->get(),        nullptr);
+    st.setProperty("mn2",   (bool)paramMono2->get(),  nullptr);
+    st.setProperty("ph2",   (bool)paramPhase2->get(), nullptr);
     MemoryOutputStream os(destData, true);
     st.writeToStream(os);
 }
@@ -262,6 +275,8 @@ void SpatialMixProProcessor::setStateInformation(const void* data, int sz)
     *paramY2    = (float)st.getProperty("y2",   1.5f);
     *paramZ2    = (float)st.getProperty("z2",  -3.0f);
     *paramGain2 = (float)st.getProperty("g2",   1.0f);
+    paramMono2 ->setValueNotifyingHost((bool)st.getProperty("mn2", false) ? 1.0f : 0.0f);
+    paramPhase2->setValueNotifyingHost((bool)st.getProperty("ph2", false) ? 1.0f : 0.0f);
 }
 
 AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new SpatialMixProProcessor(); }
