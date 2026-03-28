@@ -312,41 +312,26 @@ void SpatialMixProEditor::drawLeftPanel(Graphics& g)
     g.drawVerticalLine(rLeft.getRight(), (float)rLeft.getY(), (float)rLeft.getBottom());
 
     auto lp = rLeft.reduced(8, 8);
-    float fs   = jmax(9.0f, (float)rLeft.getHeight() / 50.0f);
-    int   rowH = jmax(22, lp.getHeight() / 16);
-    const int hH = rHeader.getHeight();
-
-    // Starting Y for slider labels — after name + gap + buttons row + gap
-    int yy = lp.getY() + jmax(22, hH - 14) + 6 + rowH + 8;
-
-    // Draw X/Y/Z/V labels to the left of each slider
+    float fs = jmax(9.0f, (float)rLeft.getHeight() / 50.0f);
     g.setFont(Font("Courier New", fs, Font::bold));
-    auto drawAxisLbl = [&](const String& lbl, Colour col) {
+
+    // Draw axis labels using actual slider positions — no manual yy calculation
+    auto drawLbl = [&](const String& lbl, Colour col, const Slider& s) {
         g.setColour(col);
-        g.drawText(lbl, lp.getX(), yy, 18, rowH, Justification::centredLeft, false);
-        yy += rowH + 3;
+        g.drawText(lbl, lp.getX(), s.getY(), 18, s.getHeight(), Justification::centredLeft, false);
     };
-    drawAxisLbl("X", Colour(C_AMBER));
-    drawAxisLbl("Y", Colour(C_GREEN));
-    drawAxisLbl("Z", Colour(C_AMBER));
-    drawAxisLbl("V", Colour(C_BLUE));
+    drawLbl("X", Colour(C_AMBER), sliderX);
+    drawLbl("Y", Colour(C_GREEN), sliderY);
+    drawLbl("Z", Colour(C_AMBER), sliderZ);
+    drawLbl("V", Colour(C_BLUE),  sliderGain);
 
     if (proc.paramDual->get())
     {
-        // Skip spk1 sliders(already counted in yy) + gap8 + nameLabel2 + gap3 + MONO2 + gap6
-        yy += 8 + jmax(20, rowH) + 3 + rowH + 6;
-        g.setFont(Font("Courier New", fs, Font::bold));
-        g.setColour(Colour(C_AMBER));
-        g.drawText("X2", lp.getX(), yy, 18, rowH, Justification::centredLeft, false); yy += rowH + 3;
-        g.setColour(Colour(C_GREEN));
-        g.drawText("Y2", lp.getX(), yy, 18, rowH, Justification::centredLeft, false); yy += rowH + 3;
-        g.setColour(Colour(C_AMBER));
-        g.drawText("Z2", lp.getX(), yy, 18, rowH, Justification::centredLeft, false); yy += rowH + 3;
-        g.setColour(Colour(C_BLUE));
-        g.drawText("V2", lp.getX(), yy, 18, rowH, Justification::centredLeft, false);
+        drawLbl("X", Colour(C_AMBER), sliderX2);
+        drawLbl("Y", Colour(C_GREEN), sliderY2);
+        drawLbl("Z", Colour(C_AMBER), sliderZ2);
+        drawLbl("V", Colour(C_BLUE),  sliderGain2);
     }
-
-
 }
 
 void SpatialMixProEditor::drawTopView(Graphics& g)
