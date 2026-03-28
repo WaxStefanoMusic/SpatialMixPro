@@ -1,285 +1,272 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+
 using namespace juce;
 
-// ── Build 8 stereo input buses + 1 stereo output ─────────────
-BusesProperties SpatialMixProProcessor::buildBuses()
+static AudioProcessor::BusesProperties getDefaultBuses()
 {
-    BusesProperties bp;
-    const char* names[] = {
-        "Source 1","Source 2","Source 3","Source 4",
-        "Source 5","Source 6","Source 7","Source 8"
-    };
-    // First bus is always enabled; rest start disabled (FL Studio enables them when you route)
-    bp = bp.withInput(names[0], AudioChannelSet::stereo(), true);
-    for (int i = 1; i < MAX_SOURCES; ++i)
-        bp = bp.withInput(names[i], AudioChannelSet::stereo(), false);
-    bp = bp.withOutput("Master Out", AudioChannelSet::stereo(), true);
-    return bp;
+    return AudioProcessor::BusesProperties()
+           .withInput ("Input",  AudioChannelSet::stereo(), true)
+           .withOutput("Output", AudioChannelSet::stereo(), true);
 }
 
 SpatialMixProProcessor::SpatialMixProProcessor()
-    : AudioProcessor(buildBuses())
+    : AudioProcessor(getDefaultBuses())
 {
-    addParameter(paramMode = new AudioParameterChoice({"mode",1},"Output Mode",
-                 StringArray{"HRTF Binaural","Stereo","2.1 Sim"}, 0));
-    addParameter(paramMasterGain = new AudioParameterFloat({"mg",1},"Master Gain", 0.f, 2.f, 1.f));
-
-    // Default source names matching orchestral layout
-    const char* defNames[] = {
-        "Violini I","Violini II","Viole","Violoncelli",
-        "Contrabbassi","Legni","Ottoni","Percussioni"
-    };
-    // Default positions (orchestra layout, metres)
-    float defX[] = { -3.f, -1.f,  1.f,  3.f,  6.f, -1.f,  0.f,  6.5f };
-    float defY[] = {  1.4f, 1.4f, 1.4f, 1.4f, 1.5f, 1.6f, 1.7f,  1.6f };
-    float defZ[] = { -5.f, -5.f, -5.f, -5.f, -4.f, -2.f,  1.f,   1.5f };
-
-    for (int i = 0; i < MAX_SOURCES; ++i)
-    {
-        auto& s = sources[i];
-        s.name = defNames[i];
-        String pfx = "s" + String(i);
-        addParameter(s.paramX     = new AudioParameterFloat ({pfx+"x", 1}, s.name+" X",    -8.f, 8.f, defX[i]));
-        addParameter(s.paramY     = new AudioParameterFloat ({pfx+"y", 1}, s.name+" Y",     0.f, 6.f, defY[i]));
-        addParameter(s.paramZ     = new AudioParameterFloat ({pfx+"z", 1}, s.name+" Z",    -8.f, 8.f, defZ[i]));
-        addParameter(s.paramGain  = new AudioParameterFloat ({pfx+"g", 1}, s.name+" Vol",   0.f, 2.f, 1.f));
-        addParameter(s.paramMono  = new AudioParameterBool  ({pfx+"m", 1}, s.name+" Mono",  false));
-        addParameter(s.paramPhase = new AudioParameterBool  ({pfx+"p", 1}, s.name+" Phase", false));
-        addParameter(s.paramActive= new AudioParameterBool  ({pfx+"a", 1}, s.name+" Active",true));
-    }
+    addParameter(paramX     = new AudioParameterFloat ({"x",  1}, "Pos X",    -8.f,  8.f,  0.f));
+    addParameter(paramY     = new AudioParameterFloat ({"y",  1}, "Pos Y",     0.f,  6.f,  1.5f));
+    addParameter(paramZ     = new AudioParameterFloat ({"z",  1}, "Pos Z",    -8.f,  8.f, -3.f));
+    addParameter(paramGain  = new AudioParameterFloat ({"g",  1}, "Volume",    0.f,  2.f,  1.f));
+    addParameter(paramMode  = new AudioParameterChoice({"md", 1}, "Mode",
+                              StringArray{"HRTF Binaural","Stereo","2.1 Sim"}, 0));
+    addParameter(paramMono  = new AudioParameterBool  ({"mn", 1}, "Mono",   false));
+    addParameter(paramPhase = new AudioParameterBool  ({"ph", 1}, "Phase",  false));
+    addParameter(paramDual  = new AudioParameterBool  ({"dl", 1}, "Dual",   false));
+    addParameter(paramX2    = new AudioParameterFloat ({"x2", 1}, "Pos X2", -8.f,  8.f,  2.f));
+    addParameter(paramY2    = new AudioParameterFloat ({"y2", 1}, "Pos Y2",  0.f,  6.f,  1.5f));
+    addParameter(paramZ2    = new AudioParameterFloat ({"z2", 1}, "Pos Z2", -8.f,  8.f, -3.f));
+    addParameter(paramGain2 = new AudioParameterFloat ({"g2", 1}, "Volume2", 0.f,  2.f,  1.f));
 }
 
 SpatialMixProProcessor::~SpatialMixProProcessor() {}
 
-// ============================================================
 void SpatialMixProProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     currentSampleRate = sampleRate;
-    dsp::ProcessSpec spec{sampleRate,(uint32)samplesPerBlock,1};
+    dBufSize = jmax(64, (int)(0.0013 * sampleRate) + 4);
+    dBufL1.assign(dBufSize, 0.f); dBufR1.assign(dBufSize, 0.f);
+    dBufL2.assign(dBufSize, 0.f); dBufR2.assign(dBufSize, 0.f);
+    dWritePos1 = dWritePos2 = 0;
 
-    for (int i = 0; i < MAX_SOURCES; ++i)
-    {
-        auto& s = sources[i];
-        s.dBufSize = jmax(64,(int)(0.0013*sampleRate)+4);
-        s.dBufL.assign(s.dBufSize,0.f);
-        s.dBufR.assign(s.dBufSize,0.f);
-        s.dWritePos = 0;
+    dsp::ProcessSpec spec { sampleRate, (uint32)samplesPerBlock, 1 };
+    for (auto* f : { &elevFL1, &elevFR1, &elevFL2, &elevFR2,
+                     &rearFL1, &rearFR1, &rearFL2, &rearFR2,
+                     &subFilterL, &subFilterR })
+    { f->prepare(spec); f->reset(); }
 
-        for (auto* f : {&s.elevFL,&s.elevFR,&s.rearFL,&s.rearFR})
-        { f->prepare(spec); f->reset(); }
-
-        auto rearC = dsp::IIR::Coefficients<float>::makeLowPass(sampleRate,3500.f,0.707f);
-        s.rearFL.coefficients = rearC; s.rearFR.coefficients = rearC;
-
-        const double sm = 0.05;
-        s.smX   .reset(sampleRate,sm); s.smX   .setCurrentAndTargetValue(s.paramX->get());
-        s.smY   .reset(sampleRate,sm); s.smY   .setCurrentAndTargetValue(s.paramY->get());
-        s.smZ   .reset(sampleRate,sm); s.smZ   .setCurrentAndTargetValue(s.paramZ->get());
-        s.smGain.reset(sampleRate,sm); s.smGain.setCurrentAndTargetValue(s.paramGain->get());
-        s.smRear.reset(sampleRate,0.1f); s.smRear.setCurrentAndTargetValue(0.f);
-    }
-
-    subFilterL.prepare(spec); subFilterR.prepare(spec);
-    subFilterL.reset(); subFilterR.reset();
-    auto subC = dsp::IIR::Coefficients<float>::makeLowPass(sampleRate,120.f,0.707f);
+    auto subC = dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, 120.f, 0.707f);
     subFilterL.coefficients = subC; subFilterR.coefficients = subC;
 
-    smMaster.reset(sampleRate,0.05);
-    smMaster.setCurrentAndTargetValue(paramMasterGain->get());
+    auto rearC = dsp::IIR::Coefficients<float>::makeLowPass(sampleRate, 3500.f, 0.707f);
+    rearFL1.coefficients = rearC; rearFR1.coefficients = rearC;
+    rearFL2.coefficients = rearC; rearFR2.coefficients = rearC;
+
+    const double sm = 0.05;
+    smX   .reset(sampleRate, sm); smX   .setCurrentAndTargetValue(paramX->get());
+    smY   .reset(sampleRate, sm); smY   .setCurrentAndTargetValue(paramY->get());
+    smZ   .reset(sampleRate, sm); smZ   .setCurrentAndTargetValue(paramZ->get());
+    smGain.reset(sampleRate, sm); smGain.setCurrentAndTargetValue(paramGain->get());
+    smX2  .reset(sampleRate, sm); smX2  .setCurrentAndTargetValue(paramX2->get());
+    smY2  .reset(sampleRate, sm); smY2  .setCurrentAndTargetValue(paramY2->get());
+    smZ2  .reset(sampleRate, sm); smZ2  .setCurrentAndTargetValue(paramZ2->get());
+    smGain2.reset(sampleRate,sm); smGain2.setCurrentAndTargetValue(paramGain2->get());
+    smRear1.reset(sampleRate, 0.1); smRear1.setCurrentAndTargetValue(0.f);
+    smRear2.reset(sampleRate, 0.1); smRear2.setCurrentAndTargetValue(0.f);
 }
 
 void SpatialMixProProcessor::releaseResources() {}
 
-// ============================================================
-void SpatialMixProProcessor::updateElevFilter(float elevDeg, SpatialSource& src)
+void SpatialMixProProcessor::updateElevFilter(float elevDeg,
+    dsp::IIR::Filter<float>& fl, dsp::IIR::Filter<float>& fr)
 {
-    float gainLin = 1.f + jmax(0.f,(elevDeg-10.f)/80.f)*2.f;
-    auto c = dsp::IIR::Coefficients<float>::makeHighShelf(currentSampleRate,8000.f,0.707f,gainLin);
-    src.elevFL.coefficients = c; src.elevFR.coefficients = c;
+    float gainLin = 1.f + jmax(0.f, (elevDeg - 10.f) / 80.f) * 2.f;
+    auto c = dsp::IIR::Coefficients<float>::makeHighShelf(
+                 currentSampleRate, 8000.f, 0.707f, gainLin);
+    fl.coefficients = c; fr.coefficients = c;
 }
 
-// ── Per-source spatialization ─────────────────────────────────
-void SpatialMixProProcessor::processSource(int idx,
-    const float* inL, const float* inR,
-    float* outL, float* outR, int numSamples, int mode)
-{
-    auto& s = sources[idx];
-
-    // Update elevation filter once per block
-    float cx=s.smX.getTargetValue(), cy=s.smY.getTargetValue(), cz=s.smZ.getTargetValue();
-    float hd=std::sqrt(cx*cx+cz*cz);
-    float el=std::atan2(cy,jmax(hd,0.001f))*(180.f/MathConstants<float>::pi);
-    updateElevFilter(el, s);
-
-    float azTarget = std::atan2(cx,-cz);
-    s.smRear.setTargetValue(jmax(0.f,-std::cos(azTarget)));
-
-    s.smX.setTargetValue(s.paramX->get());
-    s.smY.setTargetValue(s.paramY->get());
-    s.smZ.setTargetValue(s.paramZ->get());
-    s.smGain.setTargetValue(s.paramGain->get());
-
-    const bool isMono  = s.paramMono->get();
-    const bool isPhase = s.paramPhase->get();
-
-    for (int i = 0; i < numSamples; ++i)
-    {
-        const float x    = s.smX.getNextValue();
-        const float gain = s.smGain.getNextValue();
-        const float rear = s.smRear.getNextValue();
-        const float z    = s.smZ.getNextValue();
-
-        const float dist = jmax(0.1f, std::sqrt(x*x + s.smY.getCurrentValue()*s.smY.getCurrentValue() + z*z));
-        const float dg   = 1.f/dist;
-        const float az   = std::atan2(x,-z);
-        const float sinA = std::sin(az);
-        const float panL = std::sqrt(jmax(0.f,0.5f*(1.f-sinA)));
-        const float panR = std::sqrt(jmax(0.f,0.5f*(1.f+sinA)));
-
-        float mono = (inL[i]+inR[i])*0.5f * gain * dg;
-        float sL = mono*panL, sR = mono*panR;
-
-        float rL,rR;
-        if (mode == 0)
-        {
-            const float itdSec  = (0.215f/343.f)*std::sin(az);
-            const int   itdSamp = jlimit(0,s.dBufSize-1,(int)(std::abs(itdSec)*currentSampleRate));
-            s.dBufL[s.dWritePos]=sL; s.dBufR[s.dWritePos]=sR;
-            int rLi=s.dWritePos, rRi=s.dWritePos;
-            if (az>0.f) rLi=(s.dWritePos-itdSamp+s.dBufSize)%s.dBufSize;
-            else        rRi=(s.dWritePos-itdSamp+s.dBufSize)%s.dBufSize;
-            float eL=s.elevFL.processSample(s.dBufL[rLi]);
-            float eR=s.elevFR.processSample(s.dBufR[rRi]);
-            float rrL=s.rearFL.processSample(eL);
-            float rrR=s.rearFR.processSample(eR);
-            rL=eL*(1.f-rear)+rrL*rear;
-            rR=eR*(1.f-rear)+rrR*rear;
-            s.dWritePos=(s.dWritePos+1)%s.dBufSize;
-        }
-        else { rL=sL; rR=sR; }
-
-        if (isMono)  { rL=rR=(rL+rR)*0.5f; }
-        if (isPhase) { rL=-rL; rR=-rR; }
-
-        outL[i] += rL;
-        outR[i] += rR;
-    }
-}
-
-// ============================================================
 void SpatialMixProProcessor::processBlock(AudioBuffer<float>& buffer, MidiBuffer&)
 {
     ScopedNoDenormals noDenormals;
+    if (buffer.getNumChannels() < 2) return;
 
-    const int mode = paramMode->getIndex();
-    const int numSamples = buffer.getNumSamples();
-    smMaster.setTargetValue(paramMasterGain->get());
+    const int  numSamples = buffer.getNumSamples();
+    const int  mode       = paramMode->getIndex();
+    const bool isDual     = paramDual->get();
+    const bool isMono     = paramMono->get();
+    const bool isPhase    = paramPhase->get();
 
-    // Count active (enabled+connected) buses
-    numActiveBuses = 0;
-    for (int b = 0; b < MAX_SOURCES; ++b)
-        if (getBus(true,b) && getBus(true,b)->isEnabled()) numActiveBuses++;
+    auto* chL = buffer.getWritePointer(0);
+    auto* chR = buffer.getWritePointer(1);
 
-    // Output accumulator
-    std::vector<float> mixL(numSamples,0.f), mixR(numSamples,0.f);
-
-    // Get output channels (we write to them at the end)
-    int outCh0 = -1, outCh1 = -1;
+    // Update elevation filters once per block
     {
-        auto* outBus = getBus(false,0);
-        if (outBus && outBus->isEnabled()) {
-            int start = outBus->getChannelIndexInProcessBlockBuffer(0);
-            outCh0 = start; outCh1 = start+1;
+        float cx = smX.getTargetValue(), cy = smY.getTargetValue(), cz = smZ.getTargetValue();
+        float hd = std::sqrt(cx*cx + cz*cz);
+        float el = std::atan2(cy, jmax(hd, 0.001f)) * (180.f / MathConstants<float>::pi);
+        updateElevFilter(el, elevFL1, elevFR1);
+
+        if (isDual) {
+            float cx2 = smX2.getTargetValue(), cy2 = smY2.getTargetValue(), cz2 = smZ2.getTargetValue();
+            float hd2 = std::sqrt(cx2*cx2 + cz2*cz2);
+            float el2 = std::atan2(cy2, jmax(hd2, 0.001f)) * (180.f / MathConstants<float>::pi);
+            updateElevFilter(el2, elevFL2, elevFR2);
         }
     }
 
-    // Accumulate each active input bus
-    for (int b = 0; b < MAX_SOURCES; ++b)
+    // Update rear targets
     {
-        auto* bus = getBus(true,b);
-        if (!bus || !bus->isEnabled()) continue;
-        if (!sources[b].paramActive->get()) continue;
-
-        int ch0 = bus->getChannelIndexInProcessBlockBuffer(0);
-        int ch1 = bus->getChannelIndexInProcessBlockBuffer(1);
-        if (ch0 >= buffer.getNumChannels() || ch1 >= buffer.getNumChannels()) continue;
-
-        const float* inL = buffer.getReadPointer(ch0);
-        const float* inR = buffer.getReadPointer(ch1);
-
-        processSource(b, inL, inR, mixL.data(), mixR.data(), numSamples, mode);
+        float az1 = std::atan2(paramX->get(), -(paramZ->get()));
+        smRear1.setTargetValue(jmax(0.f, -std::cos(az1)));
+        if (isDual) {
+            float az2 = std::atan2(paramX2->get(), -(paramZ2->get()));
+            smRear2.setTargetValue(jmax(0.f, -std::cos(az2)));
+        }
     }
 
-    // Apply master gain + 2.1 sub + write output
+    smX.setTargetValue(paramX->get());
+    smY.setTargetValue(paramY->get());
+    smZ.setTargetValue(paramZ->get());
+    smGain.setTargetValue(paramGain->get());
+    smX2.setTargetValue(paramX2->get());
+    smY2.setTargetValue(paramY2->get());
+    smZ2.setTargetValue(paramZ2->get());
+    smGain2.setTargetValue(paramGain2->get());
+
     for (int i = 0; i < numSamples; ++i)
     {
-        float mg = smMaster.getNextValue();
-        float oL = mixL[i]*mg;
-        float oR = mixR[i]*mg;
+        const float x     = smX.getNextValue();
+        const float y     = smY.getNextValue();
+        const float z     = smZ.getNextValue();
+        const float gain  = smGain.getNextValue();
+        const float rear1 = smRear1.getNextValue();
 
-        if (mode == 2) {
-            float sub=(subFilterL.processSample(oL)+subFilterR.processSample(oR))*0.28f;
-            oL+=sub; oR+=sub;
+        const float monoIn = (chL[i] + chR[i]) * 0.5f;
+
+        // ── Speaker 1 ──────────────────────────────────────────
+        const float dist1  = jmax(0.1f, std::sqrt(x*x + y*y + z*z));
+        const float dGain1 = 1.f / dist1;
+        const float az1    = std::atan2(x, -z);
+        const float sinAz1 = std::sin(az1);
+        const float panL1  = std::sqrt(jmax(0.f, 0.5f * (1.f - sinAz1)));
+        const float panR1  = std::sqrt(jmax(0.f, 0.5f * (1.f + sinAz1)));
+
+        float sig1  = monoIn * gain * dGain1;
+        float sigL1 = sig1 * panL1;
+        float sigR1 = sig1 * panR1;
+
+        float outL1, outR1;
+        if (mode == 0)
+        {
+            const float itdSec  = (0.215f / 343.f) * std::sin(az1);
+            const int   itdSamp = jlimit(0, dBufSize - 1, (int)(std::abs(itdSec) * currentSampleRate));
+            dBufL1[dWritePos1] = sigL1;
+            dBufR1[dWritePos1] = sigR1;
+            int rL1 = dWritePos1, rR1 = dWritePos1;
+            if (az1 > 0.f) rL1 = (dWritePos1 - itdSamp + dBufSize) % dBufSize;
+            else            rR1 = (dWritePos1 - itdSamp + dBufSize) % dBufSize;
+            float eL1 = elevFL1.processSample(dBufL1[rL1]);
+            float eR1 = elevFR1.processSample(dBufR1[rR1]);
+            float rlL1 = rearFL1.processSample(eL1);
+            float rlR1 = rearFR1.processSample(eR1);
+            outL1 = eL1 * (1.f - rear1) + rlL1 * rear1;
+            outR1 = eR1 * (1.f - rear1) + rlR1 * rear1;
+            dWritePos1 = (dWritePos1 + 1) % dBufSize;
+        }
+        else { outL1 = sigL1; outR1 = sigR1; }
+
+        float outL = outL1, outR = outR1;
+
+        // ── Speaker 2 (dual mode) ───────────────────────────────
+        if (isDual)
+        {
+            const float x2    = smX2.getNextValue();
+            const float y2    = smY2.getNextValue();
+            const float z2    = smZ2.getNextValue();
+            const float g2    = smGain2.getNextValue();
+            const float rear2 = smRear2.getNextValue();
+
+            const float dist2  = jmax(0.1f, std::sqrt(x2*x2 + y2*y2 + z2*z2));
+            const float dGain2 = 1.f / dist2;
+            const float az2    = std::atan2(x2, -z2);
+            const float sinAz2 = std::sin(az2);
+            const float panL2  = std::sqrt(jmax(0.f, 0.5f * (1.f - sinAz2)));
+            const float panR2  = std::sqrt(jmax(0.f, 0.5f * (1.f + sinAz2)));
+
+            float sig2 = monoIn * g2 * dGain2;
+            float sL2  = sig2 * panL2;
+            float sR2  = sig2 * panR2;
+            float outL2, outR2;
+
+            if (mode == 0)
+            {
+                const float itdSec2 = (0.215f / 343.f) * std::sin(az2);
+                const int   itdS2   = jlimit(0, dBufSize - 1, (int)(std::abs(itdSec2) * currentSampleRate));
+                dBufL2[dWritePos2] = sL2;
+                dBufR2[dWritePos2] = sR2;
+                int rL2 = dWritePos2, rR2 = dWritePos2;
+                if (az2 > 0.f) rL2 = (dWritePos2 - itdS2 + dBufSize) % dBufSize;
+                else            rR2 = (dWritePos2 - itdS2 + dBufSize) % dBufSize;
+                float eL2  = elevFL2.processSample(dBufL2[rL2]);
+                float eR2  = elevFR2.processSample(dBufR2[rR2]);
+                float rlL2 = rearFL2.processSample(eL2);
+                float rlR2 = rearFR2.processSample(eR2);
+                outL2 = eL2 * (1.f - rear2) + rlL2 * rear2;
+                outR2 = eR2 * (1.f - rear2) + rlR2 * rear2;
+                dWritePos2 = (dWritePos2 + 1) % dBufSize;
+            }
+            else { outL2 = sL2; outR2 = sR2; }
+
+            outL = (outL1 + outL2) * 0.5f;
+            outR = (outR1 + outR2) * 0.5f;
         }
 
-        if (outCh0>=0) buffer.setSample(outCh0,i,oL);
-        if (outCh1>=0) buffer.setSample(outCh1,i,oR);
-    }
+        // ── Options ────────────────────────────────────────────
+        if (isMono)  { outL = outR = (outL + outR) * 0.5f; }
+        if (isPhase) { outL = -outL; outR = -outR; }
 
-    // Clear all input bus channels that are not output
-    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-        if (ch != outCh0 && ch != outCh1)
-            buffer.clear(ch,0,numSamples);
+        if (mode == 2) {
+            float sub = (subFilterL.processSample(outL) + subFilterR.processSample(outR)) * 0.3f;
+            outL += sub; outR += sub;
+        }
+
+        chL[i] = outL;
+        chR[i] = outR;
+    }
 }
 
-// ============================================================
 AudioProcessorEditor* SpatialMixProProcessor::createEditor()
-{ return new SpatialMixProEditor(*this); }
+{
+    return new SpatialMixProEditor(*this);
+}
 
 void SpatialMixProProcessor::getStateInformation(MemoryBlock& destData)
 {
-    ValueTree st("SMP3");
-    st.setProperty("mode", paramMode->getIndex(), nullptr);
-    st.setProperty("mg",   paramMasterGain->get(), nullptr);
-    for (int i = 0; i < MAX_SOURCES; ++i)
-    {
-        auto& s = sources[i];
-        ValueTree sv("SRC"); sv.setProperty("i",i,nullptr);
-        sv.setProperty("name", s.name,            nullptr);
-        sv.setProperty("x",    s.paramX->get(),   nullptr);
-        sv.setProperty("y",    s.paramY->get(),   nullptr);
-        sv.setProperty("z",    s.paramZ->get(),   nullptr);
-        sv.setProperty("g",    s.paramGain->get(),nullptr);
-        sv.setProperty("mn",   (bool)s.paramMono->get(),  nullptr);
-        sv.setProperty("ph",   (bool)s.paramPhase->get(), nullptr);
-        sv.setProperty("ac",   (bool)s.paramActive->get(),nullptr);
-        st.addChild(sv,-1,nullptr);
-    }
-    MemoryOutputStream os(destData,true); st.writeToStream(os);
+    ValueTree st("SMP2");
+    st.setProperty("name",  sourceName,             nullptr);
+    st.setProperty("x",     paramX->get(),           nullptr);
+    st.setProperty("y",     paramY->get(),            nullptr);
+    st.setProperty("z",     paramZ->get(),            nullptr);
+    st.setProperty("g",     paramGain->get(),         nullptr);
+    st.setProperty("mode",  paramMode->getIndex(),    nullptr);
+    st.setProperty("mono",  (bool)paramMono->get(),   nullptr);
+    st.setProperty("phase", (bool)paramPhase->get(),  nullptr);
+    st.setProperty("dual",  (bool)paramDual->get(),   nullptr);
+    st.setProperty("x2",    paramX2->get(),           nullptr);
+    st.setProperty("y2",    paramY2->get(),            nullptr);
+    st.setProperty("z2",    paramZ2->get(),            nullptr);
+    st.setProperty("g2",    paramGain2->get(),         nullptr);
+    MemoryOutputStream os(destData, true);
+    st.writeToStream(os);
 }
 
 void SpatialMixProProcessor::setStateInformation(const void* data, int sz)
 {
-    auto st = ValueTree::readFromData(data,(size_t)sz);
+    auto st = ValueTree::readFromData(data, (size_t)sz);
     if (!st.isValid()) return;
-    paramMode->setValueNotifyingHost((int)st.getProperty("mode",0)/2.f);
-    *paramMasterGain = (float)st.getProperty("mg",1.f);
-    for (auto child : st)
-    {
-        int i = (int)child.getProperty("i",-1);
-        if (i<0||i>=MAX_SOURCES) continue;
-        auto& s = sources[i];
-        s.name = child.getProperty("name",s.name).toString();
-        *s.paramX    = (float)child.getProperty("x",s.paramX->get());
-        *s.paramY    = (float)child.getProperty("y",s.paramY->get());
-        *s.paramZ    = (float)child.getProperty("z",s.paramZ->get());
-        *s.paramGain = (float)child.getProperty("g",1.f);
-        s.paramMono ->setValueNotifyingHost((bool)child.getProperty("mn",false)?1.f:0.f);
-        s.paramPhase->setValueNotifyingHost((bool)child.getProperty("ph",false)?1.f:0.f);
-        s.paramActive->setValueNotifyingHost((bool)child.getProperty("ac",true)?1.f:0.f);
-    }
+    sourceName = st.getProperty("name", "Object 1").toString();
+    *paramX     = (float)st.getProperty("x",    0.f);
+    *paramY     = (float)st.getProperty("y",    1.5f);
+    *paramZ     = (float)st.getProperty("z",   -3.f);
+    *paramGain  = (float)st.getProperty("g",    1.f);
+    paramMode->setValueNotifyingHost((int)st.getProperty("mode", 0) / 2.f);
+    paramMono ->setValueNotifyingHost((bool)st.getProperty("mono",  false) ? 1.f : 0.f);
+    paramPhase->setValueNotifyingHost((bool)st.getProperty("phase", false) ? 1.f : 0.f);
+    paramDual ->setValueNotifyingHost((bool)st.getProperty("dual",  false) ? 1.f : 0.f);
+    *paramX2    = (float)st.getProperty("x2",   2.f);
+    *paramY2    = (float)st.getProperty("y2",   1.5f);
+    *paramZ2    = (float)st.getProperty("z2",  -3.f);
+    *paramGain2 = (float)st.getProperty("g2",   1.f);
 }
 
-AudioProcessor* JUCE_CALLTYPE createPluginFilter()
-{ return new SpatialMixProProcessor(); }
+AudioProcessor* JUCE_CALLTYPE createPluginFilter() { return new SpatialMixProProcessor(); }
