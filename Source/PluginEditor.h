@@ -45,14 +45,14 @@ private:
 
     juce::Label      nameLabel;
     juce::Slider     sliderX, sliderZ, sliderGain;
-    juce::Slider     sliderX2, sliderZ2, sliderGain2;
+    juce::Slider     sliderX2, sliderY2, sliderZ2, sliderGain2;
     juce::Slider     sliderY;
     juce::TextButton btnHRTF, btnStereo, btn21;
     juce::TextButton btnMono, btnPhase, btnDual, btnHelp;
     juce::TextButton btnMono2, btnPhase2;
 
-    std::unique_ptr<juce::SliderParameterAttachment> attX, attZ, attGain;
-    std::unique_ptr<juce::SliderParameterAttachment> attX2, attZ2, attGain2, attY;
+    std::unique_ptr<juce::SliderParameterAttachment> attX, attY, attZ, attGain;
+    std::unique_ptr<juce::SliderParameterAttachment> attX2, attY2, attZ2, attGain2;
 
     juce::Rectangle<int> rHeader, rLeft, rTop, rFront, rBottom;
 
