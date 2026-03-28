@@ -333,8 +333,8 @@ void SpatialMixProEditor::drawLeftPanel(Graphics& g)
 
     if (proc.paramDual->get())
     {
-        // Skip: gap8 + nameLabel2 row(+3) + MONO2 row(+6)
-        yy += 8 + jmax(20, rowH - 2) + 3 + rowH + 6;
+        // Skip spk1 sliders(already counted in yy) + gap8 + nameLabel2 + gap3 + MONO2 + gap6
+        yy += 8 + jmax(20, rowH) + 3 + rowH + 6;
         g.setFont(Font("Courier New", fs, Font::bold));
         g.setColour(Colour(C_AMBER));
         g.drawText("X2", lp.getX(), yy, 18, rowH, Justification::centredLeft, false); yy += rowH + 3;
@@ -346,24 +346,7 @@ void SpatialMixProEditor::drawLeftPanel(Graphics& g)
         g.drawText("V2", lp.getX(), yy, 18, rowH, Justification::centredLeft, false);
     }
 
-    // Coordinate readout at bottom
-    float cx = proc.paramX->get(), cy = proc.paramY->get(), cz = proc.paramZ->get();
-    float hd   = std::sqrt(cx * cx + cz * cz);
-    float az   = std::atan2(cx, -cz) * (180.0f / MathConstants<float>::pi);
-    float el   = std::atan2(cy, jmax(hd, 0.001f)) * (180.0f / MathConstants<float>::pi);
-    float dist = std::sqrt(cx * cx + cy * cy + cz * cz);
 
-    int by = rLeft.getBottom() - (int)(rLeft.getHeight() * 0.20f);
-    g.setFont(Font("Courier New", fs * 0.85f, Font::plain));
-    g.setColour(Colour(C_DIM));
-    g.drawText("AZIMUTH", lp.getX(), by,         lp.getWidth() / 2, rowH, Justification::centredLeft, false);
-    g.drawText("ELEV",    lp.getX(), by + rowH,   lp.getWidth() / 2, rowH, Justification::centredLeft, false);
-    g.drawText("DIST",    lp.getX(), by + rowH*2, lp.getWidth() / 2, rowH, Justification::centredLeft, false);
-    g.setColour(Colour(C_AMBER));
-    g.drawText(String(az,  1) + " deg", lp.getX(), by,         lp.getWidth(), rowH, Justification::centredRight, false);
-    g.drawText(String(el,  1) + " deg", lp.getX(), by + rowH,   lp.getWidth(), rowH, Justification::centredRight, false);
-    g.setColour(Colour(C_BLUE));
-    g.drawText(String(dist,2) + " m",   lp.getX(), by + rowH*2, lp.getWidth(), rowH, Justification::centredRight, false);
 }
 
 void SpatialMixProEditor::drawTopView(Graphics& g)
